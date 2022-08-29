@@ -1,0 +1,134 @@
+# tasks file bare metal
+- name: "Baremetal install - phase 2"
+  hosts: '{{ target }}'
+  remote_user: chrootinstall
+
+  tags: [common, config, install, services]
+
+  tasks:
+  - name: Copy all necessary files
+    ansible.builtin.copy:
+      src: '{{ item.src }}'
+      dest: '{{ item.dest }}'
+      owner: '{{ item.owner }}'
+      group: '{{ item.group }}'
+      mode: '{{ item.mode }}'
+    loop:
+      - { src: "{{ inventory_hostname }}/etc/hostname", dest: "/etc/hostname", owner: "root", group: "root", mode: "0644" }
+      - { src: "{{ inventory_hostname }}/etc/hosts", dest: "/etc/hosts", owner: "root", group: "root", mode: "0644" }
+      - { src: "{{ inventory_hostname }}/etc/netplan/01-netcfg.yaml", dest: "/etc/netplan/01-netcfg.yaml", owner: "root", group: "root", mode: "0644" }
+      - { src: "etc/apt/sources.list", dest: "/etc/apt/sources.list", owner: "root", group: "root", mode: "0644" }
+
+  - name: apt update, apt upgrade
+    ansible.builtin.apt:
+      update_cache: 'True'
+      upgrade: 'True'
+
+  - name: Ensure en_US.UTF-8 locale
+    community.general.locale_gen:
+      name: en_US.UTF-8
+      state: present
+  
+  - name: Set en_US.UTF-8 as default locale
+    ansible.builtin.command: update-locale LANG=en_US.UTF-8 LANGUAGE=en_US
+
+  - name: Set timezone to Europe/Prague
+    community.general.timezone:
+      name: Europe/Prague
+
+  - name: Install zfs-initramfs dosfstools openssh-server, openvswitch-switch
+    ansible.builtin.apt: {package: [zfs-initramfs, dosfstools, openssh-server, openvswitch-switch]}
+
+  - name: "Add record for /boot to /etc/fstab"
+    ansible.builtin.lineinfile:
+      path: /etc/fstab
+      line: "{{ item.line }}"
+      state: present
+    loop:
+      - { line: '{{ usbbootdev[0] }}-part2 /boot ext2 nodev,relatime 0 0' }
+    tags: [config]
+
+  - name: Mount /boot partition
+    ansible.posix.mount:
+      path: "/boot"
+      src: "{{ usbbootdev[0] }}-part2"
+      fstype: ext2
+      opts: defaults
+      state: mounted
+
+  - name: Mount first EFI partition in USB boot scenario
+    ansible.posix.mount:
+      path: "/boot/efi"
+      src: "{{ usbbootdev[0] }}-part1"
+      fstype: vfat
+      opts: defaults
+      state: mounted
+
+  - name: Install grub-efi-amd64 grub-efi-amd64-signed linux-image-generic shim-signed
+    ansible.builtin.apt: {package: [grub-efi-amd64, grub-efi-amd64-signed, linux-image-generic, shim-signed]}
+    notify:
+    - Update GRUB
+
+  - name: Remove os-prober
+    ansible.builtin.apt:
+      package: os-prober
+      state: absent
+    notify:
+      - Update GRUB
+
+  - name: Create /root/.ssh
+    ansible.builtin.file: {state: directory, path: /root/.ssh, owner: root, group: root, mode: '0700'}
+
+  - name: Set root authorized key
+    ansible.posix.authorized_key:
+      user: root
+      state: present
+      key: "{{ssh_root_key}}"
+
+  - name: Create link to /root/.ssh
+    ansible.builtin.file: {state: link, path: /etc/systemd/system/tmp.mount, src: /usr/share/systemd/tmp.mount}
+
+  - name: Enable tmp mount
+    ansible.builtin.systemd:
+      name: tmp.mount
+      enabled: yes
+
+  - name: "Disable memory zeroing because of ZFS performance impact in /etc/default/grub, disable modeset"
+    ansible.builtin.lineinfile:
+      path: /etc/default/grub
+      regexp: '^GRUB_CMDLINE_LINUX_DEFAULT='
+      line: 'GRUB_CMDLINE_LINUX_DEFAULT="nomodeset init_on_alloc=0"'
+      backrefs: yes
+      state: present
+    notify:
+      - Update GRUB
+
+  - name: 'Set GRUB_GFXPAYLOAD_LINUX="keep" in /etc/default/grub'
+    ansible.builtin.lineinfile:
+      path: /etc/default/grub
+      line: 'GRUB_GFXPAYLOAD_LINUX="keep"'
+      state: present
+    notify:
+      - Update GRUB
+
+  - name: "Refresh initramdisk"
+    ansible.builtin.command: update-initramfs -c -k all
+
+  - name: "Install GRUB to ESP"
+    ansible.builtin.command: grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ubuntu --recheck --no-floppy
+
+  - name: Mask grub-initrd-fallback service (not working on mirror or raidz volumes) 
+    ansible.builtin.systemd:
+      name: grub-initrd-fallback.service
+      masked: yes
+
+  - name: "Setup root password"
+    ansible.builtin.lineinfile:
+      path: /etc/shadow
+      regexp: '^root:'
+      line: 'root:$6$HZnblNjayfVielwY$tUaKNM27RogigzE8308GaHaFLoHR1IZOFTxLOKlav9kMz4.lYVNqRzAqZgIYK9XdZAnzsrVG.7SSUdL8iRXli.:19233:0:99999:7:::'
+      backrefs: yes
+      state: present
+
+  handlers:
+    - ansible.builtin.import_tasks: handlers/main.yml

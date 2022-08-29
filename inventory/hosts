@@ -1,0 +1,6 @@
+[all]
+ts-1277xu-rp ansible_host=192.168.151.135
+
+[all:vars]
+ansible_connection=ssh
+ansible_become_method=su

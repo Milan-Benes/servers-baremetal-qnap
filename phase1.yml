@@ -1,0 +1,162 @@
+# tasks file bare metal
+- name: "Baremetal install - phase 1"
+  hosts: '{{ target }}'
+  remote_user: root
+  tags: [common, config, install, services]
+
+  tasks:
+  - name: apt update, apt upgrade
+    ansible.builtin.apt:
+      update_cache: 'True'
+      upgrade: 'True'
+
+  - name: Install debootstrap gdisk zfs-initramfs
+    ansible.builtin.apt: {package: [debootstrap, gdisk, zfs-initramfs]}
+
+  - name: 'Stop service zed'
+    ansible.builtin.service: { name: zed, state: stopped }
+
+  - name: "Unmount filesystems in chroot"
+    ansible.builtin.mount:
+      path: "{{ item.path }}"
+      src: "none"
+      fstype: "{{ item.fstype }}"
+      state: "unmounted"
+    loop:
+      - { path: '/mnt/proc', fstype: 'proc'}
+      - { path: '/mnt/sys', fstype: 'sysfs'}
+      - { path: '/mnt/dev', fstype: 'devtmpfs'}
+
+  - name: Gather space usage about all imported ZFS pools
+    community.general.zpool_facts: properties='name'
+
+  - name: Destroy all ZFS pools
+    ansible.builtin.shell: >-
+      set -o pipefail;
+      zpool destroy {{ item.name }}
+    args:
+      executable: /bin/bash
+    with_items: '{{ ansible_zfs_pools }}'
+  
+  - name: Prepare drives
+    ansible.builtin.include_tasks: prepare_drives.yml
+    loop: "{{ disks }}"
+    loop_control:
+      loop_var: outer_item
+
+  - name: Prepare USB media
+    ansible.builtin.include_tasks: prepare_usb.yml
+    loop: "{{ usbbootdev }}"
+    loop_control:
+      loop_var: outer_item
+
+  - name: Create rpool zpool
+    ansible.builtin.shell: >-
+      set -o pipefail;
+      zpool create -f -o ashift={{ rpool_ashift | default(12) }} -d \
+          -o feature@async_destroy=enabled \
+          -o feature@empty_bpobj=enabled \
+          -o feature@lz4_compress=enabled \
+          -o feature@multi_vdev_crash_dump=enabled \
+          -o feature@spacemap_histogram=enabled \
+          -o feature@enabled_txg=enabled \
+          -o feature@hole_birth=disabled \
+          -o feature@extensible_dataset=enabled \
+          -o feature@embedded_data=enabled \
+          -o feature@bookmarks=enabled \
+          -o feature@filesystem_limits=enabled \
+          -o feature@large_blocks=enabled \
+          -o feature@large_dnode=enabled \
+          -o feature@sha512=enabled \
+          -o feature@skein=enabled \
+          -o feature@edonr=enabled \
+          -o feature@userobj_accounting=enabled \
+          -o feature@encryption=enabled \
+          -o feature@project_quota=enabled \
+          -o feature@device_removal=enabled \
+          -o feature@obsolete_counts=enabled \
+          -o feature@zpool_checkpoint=enabled \
+          -o feature@spacemap_v2=enabled \
+          -o feature@allocation_classes=enabled \
+          -o feature@resilver_defer=enabled \
+          -o feature@bookmark_v2=enabled \
+          -O acltype=posixacl -O canmount=off -O compression=lz4 \
+          -O dnodesize=auto -O normalization=formD -O relatime=on -O xattr=sa \
+          -O mountpoint=/ -R /mnt rpool {{ vdev_type_rpool }} {{ disks | product(['part1']) | map('join', '-') | join(' ') }}
+    args:
+      executable: /bin/bash
+    
+  - name: Create root container dataset
+    community.general.zfs:
+      name: rpool/ROOT
+      state: present
+      extra_zfs_properties:
+        canmount: off
+        mountpoint: none
+
+  - name: Create root dataset
+    community.general.zfs:
+      name: rpool/ROOT/ubuntu
+      state: present
+      extra_zfs_properties:
+        canmount: noauto
+        mountpoint: /
+
+  - name: Mount root filesystem
+    ansible.builtin.shell: >-
+      set -o pipefail;
+      zfs mount rpool/ROOT/ubuntu  
+    args:
+      executable: /bin/bash
+
+  - name: Create boot fs mountpoint
+    ansible.builtin.file: {state: directory, path: /mnt/boot, owner: root, group: root, mode: '0755'}
+
+  - name: Mount boot partition in USB boot scenario
+    ansible.posix.mount:
+      path: "/mnt/boot"
+      src: "{{ usbbootdev[0] }}-part2"
+      fstype: ext2
+      opts: defaults
+      state: mounted
+
+  - name: Do debootstrap
+    ansible.builtin.shell: >-
+      set -o pipefail;
+      debootstrap --include=openssh-server focal /mnt  
+    args:
+      executable: /bin/bash
+
+  - name: "Create user chrootinstall as an alias for root"
+    ansible.builtin.user:
+      name: chrootinstall
+      uid: 0
+      group: root
+      home: /root
+      shell: /bin/bash
+      non_unique: yes
+
+  - name: "Setup chroot configuration for user chrootinstall "
+    ansible.builtin.lineinfile:
+      path: /etc/ssh/sshd_config
+      line: "{{ item.line }}"
+      state: present
+    loop:
+      - { line: 'Match User chrootinstall' }
+      - { line: 'ChrootDirectory /mnt' }
+    notify: Reload sshd
+    tags: [config]
+
+  - name: "Mount filesystems in chroot"
+    ansible.builtin.mount:
+      path: "{{ item.path }}"
+      src: "none"
+      fstype: "{{ item.fstype }}"
+      state: "mounted"
+    loop:
+      - { path: '/mnt/proc', fstype: 'proc'}
+      - { path: '/mnt/sys', fstype: 'sysfs'}
+      - { path: '/mnt/dev', fstype: 'devtmpfs'}
+
+  handlers:
+    - ansible.builtin.import_tasks: handlers/main.yml

@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+        "files.defaultLanguage": "ansible",
+        "files.associations": {
+            "*.yml": "ansible"
+        },
+		"yaml.schemas": {
+			"https://raw.githubusercontent.com/ansible-community/schemas/main/f/ansible-inventory.json": "inventory/host_vars/*.yml"
+		}
+	}
+}

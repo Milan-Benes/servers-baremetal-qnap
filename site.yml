@@ -1,0 +1,6 @@
+- name: "Baremetal install"
+  hosts: '{{ target }}'
+
+- ansible.builtin.import_playbook: phase1.yml
+- ansible.builtin.import_playbook: phase2.yml
+- ansible.builtin.import_playbook: phase3.yml

@@ -1,0 +1,13 @@
+- name: "Baremetal install - phase 3"
+  hosts: '{{ target }}'
+  remote_user: root
+  tags: [common, config, install, services]
+
+  tasks:
+  - name: Unmount filesystems before reboot
+    ansible.builtin.shell: >-
+      set -o pipefail;
+      mount | grep -v zfs | tac | awk '/\/mnt/ {print $3}' | xargs -i{} umount -lf {};
+      zpool export -a;
+    args:
+      executable: /bin/bash

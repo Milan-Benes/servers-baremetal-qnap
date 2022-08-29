@@ -1,0 +1,5 @@
+usbbootdev: [/dev/disk/by-id/usb-ADATA_IUM3M-005GMHS_121262321813000328-0:0]
+disks: [/dev/disk/by-id/ata-Samsung_SSD_860_EVO_1TB_S4CSNF0M952887V, /dev/disk/by-id/ata-Samsung_SSD_860_EVO_1TB_S4X6NF0M843668J]
+vdev_type_rpool: mirror
+rpool_size: 40G
+ssh_root_key: "Paste your OpenSSH public key here"

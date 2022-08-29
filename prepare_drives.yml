@@ -1,0 +1,29 @@
+- name: Read device information (always use unit when probing)
+  community.general.parted: device={{ outer_item }} unit=MiB
+  register: part_info
+
+- name: Set drive label to gpt
+  community.general.parted: device={{ outer_item }} label=gpt
+
+- name: Remove all partitions from disk
+  community.general.parted:
+    device: '{{ outer_item }}'
+    number: '{{ item.num }}'
+    state: absent
+  loop: '{{ part_info.partitions }}'
+
+- name: Create root pool partition
+  community.general.parted:
+    device: '{{ outer_item }}'
+    number: 1
+    state: present
+    part_start: 1MiB
+    part_end: 40961MiB
+
+- name: Wait for rpool partition
+  ansible.builtin.wait_for:
+    path: '{{ outer_item }}-part1'
+
+- name: Wait another 5 seconds
+  ansible.builtin.pause:
+    seconds: 5

@@ -1,0 +1,58 @@
+- name: Read device information (always use unit when probing)
+  community.general.parted: device={{ outer_item }} unit=MiB
+  register: part_info
+
+- name: Set drive label to gpt
+  community.general.parted: device={{ outer_item }} label=gpt
+
+- name: Remove all partitions from disk
+  community.general.parted:
+    device: '{{ outer_item }}'
+    number: '{{ item.num }}'
+    state: absent
+  loop: '{{ part_info.partitions }}'
+
+- name: Create EFI partition
+  community.general.parted:
+    device: '{{ outer_item }}'
+    number: 1
+    state: present
+    part_start: 1MiB
+    part_end: 513MiB
+    flags: [boot, esp]
+
+- name: Wait for EFI partition
+  ansible.builtin.wait_for:
+    path: '{{ outer_item }}-part1'
+
+- name: Wait another 5 seconds
+  ansible.builtin.pause:
+    seconds: 5
+
+- name: Format EFI partition to FAT32
+  community.general.filesystem:
+    fstype: vfat
+    dev: '{{ outer_item }}-part1'
+    force: yes
+
+- name: Create boot partition
+  community.general.parted:
+    device: '{{ outer_item }}'
+    number: 2
+    state: present
+    part_start: 513MiB
+    part_end: 2513MiB
+
+- name: Wait for boot partition
+  ansible.builtin.wait_for:
+    path: '{{ outer_item }}-part2'
+
+- name: Wait another 5 seconds
+  ansible.builtin.pause:
+    seconds: 5
+
+- name: Format boot partition to ext2
+  community.general.filesystem:
+    fstype: ext2
+    dev: '{{ outer_item }}-part2'
+    force: yes

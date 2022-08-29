@@ -1,0 +1,46 @@
+network:
+  version: 2
+  renderer: networkd
+
+  ethernets:
+    enp1s0f0:
+      addresses: []
+      dhcp4: false
+      dhcp6: false
+    enp1s0f1:
+      addresses: []
+      dhcp4: false
+      dhcp6: false
+
+  bonds:
+    bond0:
+      addresses: []
+      dhcp4: false
+      dhcp6: false
+      interfaces:
+      - enp1s0f0
+      - enp1s0f1
+      openvswitch:
+        lacp: off
+      parameters:
+        mode: active-backup
+
+  bridges:
+    ovsbr0:
+      dhcp4: false
+      interfaces:
+      - bond0
+      openvswitch: {}
+
+  vlans:
+    vlan_1209_mgmt:
+      id: 1209
+      link: ovsbr0
+      addresses:
+      - 10.35.249.10/16
+      gateway4: 10.35.0.1
+      nameservers:
+        addresses:
+        - 10.35.248.12
+        - 10.35.248.13
+      dhcp4: false
