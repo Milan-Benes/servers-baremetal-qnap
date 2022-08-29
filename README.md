@@ -25,3 +25,5 @@ As stated above - this playbook **destroys all ZFS pools** on the target machine
 - You need to define your SSH public key in the host variables file, as well as drive paths (both USB and SATA)
 - This playbook is basically an attempt to implement [Ubuntu 20.04 Root on ZFS](https://openzfs.github.io/openzfs-docs/Getting%20Started/Ubuntu/Ubuntu%2020.04%20Root%20on%20ZFS.html) HOWTO
 - Please note that the POST phase takes a really long time (about 2 minutes)
+- The root password in the installed system is "Illchangemypassword".
+
