@@ -1,4 +1,4 @@
-# servers-baremetal
+# servers-baremetal-qnap
 
 ## Purpose
 
