@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This Ansible playbook installs Ubuntu 20.04 LTS on QNAP TS-1277XU-RP booted from Ubuntu Focal server flash drive install media. Root file system will be placed on ZFS, but the kernels and bootloader have to be placed on the internal USB flash drive, because the firmware doesn't expose the SATA drives in the bootloader phase and it is unable to load a bootloader from them as well.
+This Ansible playbook installs Ubuntu 20.04 LTS on [QNAP TS-1277XU-RP](https://www.qnap.com/en/product/ts-1277xu-rp/specs/hardware) booted from Ubuntu Focal server flash drive install media. Root file system will be placed on ZFS, but the kernels and bootloader have to be placed on the internal USB flash drive, because the firmware doesn't expose the SATA drives in the bootloader phase and it is unable to load a bootloader from them as well.
 
 ## Prerequisities
 
